@@ -38,8 +38,8 @@ Gere insights de mercado. Retorne ESTRITAMENTE um JSON puro, sem introduções e
   "concorrenciaInsight": "Competição moderada."
 }`;
 
-        // 🚀 MUDANÇA AQUI: Trocado 'v1beta' por 'v1' e usando o modelo estável
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+        // 🚀 ATUALIZADO PARA GEMINI 2.0 FLASH (O padrão oficial em v1)
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         const response = await fetch(url, {
             method: 'POST',
@@ -64,7 +64,7 @@ Gere insights de mercado. Retorne ESTRITAMENTE um JSON puro, sem introduções e
 
         const responseText = data.candidates[0].content.parts[0].text;
         
-        // Extrator de JSON caso venha com alguma sujeira
+        // Extrator de JSON blindado
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
             return res.status(500).json({ error: 'IA não retornou um formato válido.' });
