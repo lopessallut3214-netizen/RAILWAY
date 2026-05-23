@@ -6,7 +6,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const SHARED_SECRET = process.env.SHARED_SECRET || 'shopee-profit-finder-2025';
 
 let ai = null;
 if (GEMINI_API_KEY) {
@@ -36,11 +35,7 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/analyze', async (req, res) => {
-    const { secret, productTitle, price } = req.body;
-
-    if (secret !== SHARED_SECRET) {
-        return res.status(401).json({ error: 'Não autorizado.' });
-    }
+    const { productTitle, price } = req.body;
 
     if (!ai) {
         return res.status(500).json({ error: 'Serviço de IA não configurado no servidor.' });
