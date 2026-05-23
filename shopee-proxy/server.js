@@ -5,7 +5,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Lê a chave limpando espaços em branco acidentais
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
 let ai = null;
@@ -44,33 +43,35 @@ app.post('/analyze', async (req, res) => {
 
     try {
         const prompt = `
-        Analise brevemente o produto: ${productTitle} com preço R$ ${price}.
-        Retorne estritamente um objeto JSON válido com o formato exato:
+        Analise brevemente este produto da Shopee: "${productTitle}" que custa R$ ${price}.
+        Gere insights realistas sobre a procura e concorrência para este nicho de mercado.
+        Você deve responder estritamente no seguinte formato JSON, sem formatação markdown:
         {
-          "demanda": "Alta Demanda",
-          "demandaJustificativa": "Produto com excelente volume de buscas e mercado ativo.",
+          "demanda": "Alta Demanda ou Média Demanda ou Baixa Demanda",
+          "demandaJustificativa": "Sua justificativa curta aqui.",
           "vendaRecomendada": ${price || 100},
           "custoMaxFornecedor": ${price ? (parseFloat(price) * 0.55).toFixed(2) : 50},
-          "concorrenciaInsight": "Competição saudável neste nicho."
+          "concorrenciaInsight": "Seu insight de concorrência aqui."
         }
-        Não inclua markdown (como \`\`\`json). Apenas o JSON puro.
         `;
 
-        // Utilizando o modelo 1.5-flash atualizado
-        const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        // Configuração que força o Gemini a responder apenas em formato JSON estruturado
+        const model = ai.getGenerativeModel({ 
+            model: 'gemini-1.5-flash',
+            generationConfig: { responseMimeType: "application/json" }
+        });
+
         const result = await model.generateContent(prompt);
         const response = await result.response;
-        let responseText = response.text().trim();
+        const responseText = response.text().trim();
         
-        if (responseText.startsWith('```')) {
-            responseText = responseText.replace(/^```json/, '').replace(/^```/, '').replace(/```$/, '').trim();
-        }
-        
+        console.log("Resposta bruta do Gemini:", responseText);
+
         const analysisResult = JSON.parse(responseText);
         res.json(analysisResult);
 
     } catch (error) {
-        console.error('Erro na análise:', error);
+        console.error('Erro detalhado na análise:', error);
         res.status(500).json({ error: 'Falha na inteligência artificial ao gerar resposta.' });
     }
 });
