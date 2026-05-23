@@ -4,29 +4,19 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Puxa a chave limpando qualquer espaço oculto
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
-if (GEMINI_API_KEY) {
-    console.log('✅ Chave GEMINI_API_KEY identificada no ambiente.');
-} else {
-    console.error('❌ GEMINI_API_KEY não encontrada nas variáveis de ambiente!');
-}
-
+// Libera geral o CORS para evitar bloqueios do navegador
 app.use(express.json({ limit: '20kb' }));
 app.use(cors({
-    origin: (origin, cb) => {
-        if (!origin || /^chrome-extension:\/\//.test(origin) || /^http:\/\/localhost/.test(origin)) {
-            return cb(null, true);
-        }
-        cb(new Error('CORS bloqueado: ' + origin));
-    },
+    origin: '*',
     methods: ['GET', 'POST']
 }));
 
 app.get('/health', (req, res) => {
     res.json({
         status: "ok",
-        service: "Shopee Profit Finder Proxy (HTTP Direto)",
         hasKey: !!GEMINI_API_KEY
     });
 });
@@ -35,24 +25,20 @@ app.post('/analyze', async (req, res) => {
     const { productTitle, price } = req.body;
 
     if (!GEMINI_API_KEY) {
-        return res.status(500).json({ error: 'Chave de IA não configurada no servidor.' });
+        return res.status(500).json({ error: 'Chave GEMINI_API_KEY não encontrada no servidor.' });
     }
 
     try {
-        const prompt = `
-        Analise brevemente este produto da Shopee: "${productTitle}" que custa R$ ${price}.
-        Gere insights sobre a procura e concorrência para este nicho de mercado.
-        Você DEVE responder estritamente no seguinte formato JSON estruturado, sem usar markdown (sem aspas triplas ou a palavra json):
-        {
-          "demanda": "Alta Demanda",
-          "demandaJustificativa": "Produto com excelente volume de buscas e mercado ativo.",
-          "vendaRecomendada": ${price || 100},
-          "custoMaxFornecedor": ${price ? (parseFloat(price) * 0.55).toFixed(2) : 50},
-          "concorrenciaInsight": "Competição moderada para este segmento."
-        }
-        `;
+        const prompt = `Analise o produto da Shopee: "${productTitle}" custando R$ ${price}.
+Gere insights de mercado. Retorne ESTRITAMENTE um JSON puro, sem introduções e sem markdown.
+{
+  "demanda": "Alta Demanda",
+  "demandaJustificativa": "Produto com excelente volume de buscas.",
+  "vendaRecomendada": ${price || 100},
+  "custoMaxFornecedor": ${price ? (parseFloat(price) * 0.55).toFixed(2) : 50},
+  "concorrenciaInsight": "Competição moderada."
+}`;
 
-        // Requisição HTTP direta para a API oficial do Gemini 1.5 Flash
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         const response = await fetch(url, {
@@ -63,25 +49,35 @@ app.post('/analyze', async (req, res) => {
             })
         });
 
+        // 🚨 SE A CHAVE ESTIVER INVÁLIDA, O ERRO APARECE AQUI
+        if (!response.ok) {
+            const errData = await response.json();
+            return res.status(500).json({ 
+                error: `Erro da API do Google: ${errData.error?.message || 'Chave inválida ou bloqueada'}` 
+            });
+        }
+
         const data = await response.json();
         
         if (!data.candidates || data.candidates.length === 0) {
-            throw new Error('Nenhuma resposta retornada da API do Gemini.');
+            return res.status(500).json({ error: 'O Google Gemini não enviou resposta.' });
         }
 
-        let responseText = data.candidates[0].content.parts[0].text.trim();
+        const responseText = data.candidates[0].content.parts[0].text;
         
-        // Limpeza de qualquer marcação Markdown residual
-        if (responseText.startsWith('```')) {
-            responseText = responseText.replace(/^```json/, '').replace(/^```/, '').replace(/```$/, '').trim();
+        // 🚨 EXTRATOR BLINDADO DE JSON (Pega só o que tá entre { e })
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            return res.status(500).json({ error: 'IA não retornou um formato válido. Tente de novo.' });
         }
         
-        const analysisResult = JSON.parse(responseText);
+        const analysisResult = JSON.parse(jsonMatch[0]);
         res.json(analysisResult);
 
     } catch (error) {
-        console.error('Erro detalhado:', error);
-        res.status(500).json({ error: 'Falha ao processar os dados da análise.' });
+        // 🚨 SE QUEBRAR NO CÓDIGO, MOSTRA O MOTIVO REAL NA TELA
+        console.error('Erro no catch:', error);
+        res.status(500).json({ error: `Erro no servidor: ${error.message}` });
     }
 });
 
