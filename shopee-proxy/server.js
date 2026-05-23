@@ -1,11 +1,11 @@
 // =================================================================
-// Shopee Profit Finder - Proxy Backend v2.5 (Edição Gemini Free)
+// Shopee Profit Finder - Proxy Backend v2.6 (Edição Gemini Estável)
 // Node.js + Express | Deploy: Railway
 // =================================================================
 
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,7 +17,7 @@ const SHARED_SECRET = process.env.SHARED_SECRET || 'shopee-profit-finder-2025';
 // Inicializa o SDK do Gemini
 let ai = null;
 if (GEMINI_API_KEY) {
-    ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    ai = new GoogleGenerativeAI(GEMINI_API_KEY);
     console.log('✅ SDK do Gemini inicializado com sucesso.');
 } else {
     console.error('❌ GEMINI_API_KEY não definida nas variáveis de ambiente!');
@@ -49,7 +49,6 @@ app.get('/health', (req, res) => {
 app.post('/analyze', async (req, res) => {
     const { secret, productTitle, price, stock, sales, category, description } = req.body;
 
-    // Validação de segurança básica
     if (secret !== SHARED_SECRET) {
         return res.status(401).json({ error: 'Não autorizado.' });
     }
@@ -70,29 +69,29 @@ app.post('/analyze', async (req, res) => {
         Categoria: ${category}
         Descrição/Detalhes: ${description || 'Não informada'}
         
-        Você DEVE responder ESTRITAMENTE em formato JSON (sem markdown, sem blocos de texto, apenas o objeto puro), usando a seguinte estrutura exata:
+        Você DEVE responder ESTRITAMENTE em formato JSON usando a seguinte estrutura exata:
         {
-          "demanda": "Alta Demanda" ou "Média Demanda" ou "Baixa Demanda",
-          "demandaJustificativa": "uma frase curta explicando o porquê com base nas vendas",
-          "vendaRecomendada": num_preco_sugerido,
-          "custoMaxFornecedor": num_custo_maximo,
-          "concorrenciaInsight": "uma frase curta sobre o nível de competição e posicionamento de preço"
+          "demanda": "Alta Demanda",
+          "demandaJustificativa": "com base nas vendas",
+          "vendaRecomendada": ${price},
+          "custoMaxFornecedor": ${price ? (parseFloat(price) * 0.5).toFixed(2) : 0},
+          "concorrenciaInsight": "Competição moderada para esta categoria."
         }
+        
+        Retorne APENAS o JSON puro, sem usar markdown (sem blocos com \`\`\`json).
         `;
 
-        // Chama o modelo gemini-2.5-flash (rápido e econômico/gratuito)
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                // Força o modelo a devolver o output estritamente em JSON estruturado
-                responseMimeType: 'application/json'
-            }
-        });
-
-        const responseText = response.text;
+        // Pega o modelo estável gemini-pro
+        const model = ai.getGenerativeModel({ model: 'gemini-pro' });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        let responseText = response.text().trim();
         
-        // Converte a resposta em objeto e envia de volta para a extensão
+        // Limpeza de segurança caso o modelo insista em colocar tags markdown
+        if (responseText.startsWith('```')) {
+            responseText = responseText.replace(/^```json/, '').replace(/^```/, '').replace(/```$/, '').trim();
+        }
+        
         const analysisResult = JSON.parse(responseText);
         res.json(analysisResult);
 
@@ -103,5 +102,5 @@ app.post('/analyze', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Servidor a rodar na porta ${PORT}`);
+    console.log(`Servidor rodando na porta ${PORT}`);
 });
