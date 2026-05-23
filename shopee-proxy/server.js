@@ -5,14 +5,15 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+// Pega a chave limpando qualquer espaço em branco acidental
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
 let ai = null;
 if (GEMINI_API_KEY) {
     ai = new GoogleGenerativeAI(GEMINI_API_KEY);
     console.log('✅ SDK do Gemini inicializado com sucesso.');
 } else {
-    console.error('❌ GEMINI_API_KEY não definida nas variáveis de ambiente!');
+    console.error('❌ GEMINI_API_KEY não encontrada nas variáveis de ambiente!');
 }
 
 app.use(express.json({ limit: '20kb' }));
@@ -37,8 +38,14 @@ app.get('/health', (req, res) => {
 app.post('/analyze', async (req, res) => {
     const { productTitle, price } = req.body;
 
-    if (!ai) {
-        return res.status(500).json({ error: 'Serviço de IA não configurado no servidor.' });
+    // Se o objeto 'ai' não iniciou, tenta buscar a chave novamente de forma direta
+    let currentAi = ai;
+    if (!currentAi && process.env.GEMINI_API_KEY) {
+        currentAi = new GoogleGenerativeAI(process.env.GEMINI_API_KEY.trim());
+    }
+
+    if (!currentAi) {
+        return res.status(500).json({ error: 'Serviço de IA não configurado no servidor. Verifique a GEMINI_API_KEY na Railway.' });
     }
 
     try {
@@ -46,16 +53,16 @@ app.post('/analyze', async (req, res) => {
         Analise brevemente o produto: ${productTitle} com preço R$ ${price}.
         Retorne estritamente um objeto JSON com o formato:
         {
-          "demanda": "Média Demanda",
-          "demandaJustificativa": "Produto com buscas constantes na plataforma.",
+          "demanda": "Alta Demanda",
+          "demandaJustificativa": "Produto com excelente volume de buscas e mercado ativo.",
           "vendaRecomendada": ${price || 100},
-          "custoMaxFornecedor": ${price ? (parseFloat(price) * 0.6).toFixed(2) : 50},
-          "concorrenciaInsight": "Concorrência moderada para este nicho."
+          "custoMaxFornecedor": ${price ? (parseFloat(price) * 0.55).toFixed(2) : 50},
+          "concorrenciaInsight": "Competição saudável. Foco em diferenciação no anúncio."
         }
         Não inclua markdown (como \`\`\`json). Apenas o JSON puro.
         `;
 
-        const model = ai.getGenerativeModel({ model: 'gemini-pro' });
+        const model = currentAi.getGenerativeModel({ model: 'gemini-pro' });
         const result = await model.generateContent(prompt);
         const response = await result.response;
         let responseText = response.text().trim();
@@ -69,7 +76,7 @@ app.post('/analyze', async (req, res) => {
 
     } catch (error) {
         console.error('Erro na análise:', error);
-        res.status(500).json({ error: 'Falha na inteligência artificial.' });
+        res.status(500).json({ error: 'Falha na inteligência artificial ao gerar resposta.' });
     }
 });
 
