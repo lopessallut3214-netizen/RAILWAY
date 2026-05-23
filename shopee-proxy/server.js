@@ -7,7 +7,6 @@ const PORT = process.env.PORT || 3000;
 // Puxa a chave limpando qualquer espaço oculto
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
 
-// Libera geral o CORS para evitar bloqueios do navegador
 app.use(express.json({ limit: '20kb' }));
 app.use(cors({
     origin: '*',
@@ -39,7 +38,8 @@ Gere insights de mercado. Retorne ESTRITAMENTE um JSON puro, sem introduções e
   "concorrenciaInsight": "Competição moderada."
 }`;
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+        // 🚀 MUDANÇA AQUI: Trocado 'v1beta' por 'v1' e usando o modelo estável
+        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         
         const response = await fetch(url, {
             method: 'POST',
@@ -49,11 +49,10 @@ Gere insights de mercado. Retorne ESTRITAMENTE um JSON puro, sem introduções e
             })
         });
 
-        // 🚨 SE A CHAVE ESTIVER INVÁLIDA, O ERRO APARECE AQUI
         if (!response.ok) {
             const errData = await response.json();
             return res.status(500).json({ 
-                error: `Erro da API do Google: ${errData.error?.message || 'Chave inválida ou bloqueada'}` 
+                error: `Erro da API do Google: ${errData.error?.message || 'Erro na requisição'}` 
             });
         }
 
@@ -65,17 +64,16 @@ Gere insights de mercado. Retorne ESTRITAMENTE um JSON puro, sem introduções e
 
         const responseText = data.candidates[0].content.parts[0].text;
         
-        // 🚨 EXTRATOR BLINDADO DE JSON (Pega só o que tá entre { e })
+        // Extrator de JSON caso venha com alguma sujeira
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-            return res.status(500).json({ error: 'IA não retornou um formato válido. Tente de novo.' });
+            return res.status(500).json({ error: 'IA não retornou um formato válido.' });
         }
         
         const analysisResult = JSON.parse(jsonMatch[0]);
         res.json(analysisResult);
 
     } catch (error) {
-        // 🚨 SE QUEBRAR NO CÓDIGO, MOSTRA O MOTIVO REAL NA TELA
         console.error('Erro no catch:', error);
         res.status(500).json({ error: `Erro no servidor: ${error.message}` });
     }
